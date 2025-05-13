@@ -22,7 +22,7 @@ A full-stack real-time chat application built with:
 
 ### 1. Clone the repository
 
-git clone https://github.com/your-username/chatapp.git
+git clone https://github.com/Jishnu-21/chatapp.git
 cd chatapp
 2. Install dependencies
 bash
