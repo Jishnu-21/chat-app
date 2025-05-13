@@ -1,7 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 
-// Define the server URL
-const SERVER_URL = import.meta.env.VITE_SERVER_URL || 'http://localhost:5000';
+// Use direct server URL to avoid proxy issues
+const SERVER_URL = 'http://localhost:5000';
 
 // Create a singleton socket instance
 let socket: Socket | null = null;
@@ -64,7 +64,18 @@ export const getSocket = (): Socket | null => {
 // Send a message to another user
 export const sendMessage = (to: string, message: string): void => {
   if (socket) {
+    console.log('Sending message via socket:', { to, message });
     socket.emit('message:send', { to, message });
+  } else {
+    console.error('Cannot send message: Socket not connected');
+    // Try to reconnect
+    try {
+      const reconnectedSocket = initializeSocket();
+      console.log('Socket reconnected, sending message');
+      reconnectedSocket.emit('message:send', { to, message });
+    } catch (error) {
+      console.error('Failed to reconnect socket for sending message:', error);
+    }
   }
 };
 

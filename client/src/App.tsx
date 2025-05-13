@@ -1,8 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { userApi, messageApi, authApi } from './services/api';
 import { initializeSocket, disconnectSocket, sendMessage, getSocket } from './services/socket';
+import AuthFormComponent from './components/AuthForm';
+import UserList from './components/UserList';
+import ChatArea from './components/ChatArea';
 import { Socket } from 'socket.io-client';
 
+// Import types from components
 interface User {
   _id: string;
   username: string;
@@ -30,6 +34,10 @@ interface AuthForm {
   password: string;
 }
 
+interface SocketError extends Error {
+  message: string;
+}
+
 type AuthMode = 'login' | 'register';
 
 const App = () => {
@@ -43,6 +51,7 @@ const App = () => {
   const [authForm, setAuthForm] = useState<AuthForm>({ username: '', password: '' });
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [authError, setAuthError] = useState<string>('');
+  const [showMobileChat, setShowMobileChat] = useState<boolean>(false);
   const typingTimeoutRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const socketInitializedRef = useRef<boolean>(false);
@@ -91,7 +100,7 @@ const App = () => {
       socketInitializedRef.current = true;
       
       // Handle authentication errors
-      socketInstance.on('connect_error', (error) => {
+      socketInstance.on('connect_error', (error: SocketError) => {
         console.error('Socket connection error:', error.message);
         if (error.message === 'Authentication error') {
           // Clear invalid credentials
@@ -215,22 +224,7 @@ const App = () => {
   useEffect(() => {
     if (currentUser && currentChat) {
       fetchMessages();
-      
       messageApi.markAsRead(currentUser._id, currentChat);
-      
-      const chatUser = users.find(u => u._id === currentChat);
-      if (chatUser) {
-        const statusMessage: Message = {
-          _id: `status-initial-${Date.now()}`,
-          sender: 'system',
-          recipient: currentUser._id,
-          content: `${chatUser.username} is ${chatUser.status === 'online' ? 'online' : 'offline'}`,
-          read: true,
-          createdAt: new Date().toISOString(),
-          type: 'system'
-        };
-        setMessages([statusMessage]);
-      }
     }
   }, [currentUser, currentChat, users]);
 
@@ -258,10 +252,7 @@ const App = () => {
       
       setCurrentUser(user);
       setAuthForm({ username: '', password: '' });
-      
-      // Reset socket initialization flag
       socketInitializedRef.current = false;
-      
       setIsLoading(false);
     } catch (error) {
       console.error(`Error during ${authMode}:`, error);
@@ -418,262 +409,87 @@ const App = () => {
     handleTyping(e.target.value.length > 0);
   };
 
-  if (isLoading) {
-    return <div className="flex h-screen items-center justify-center">Loading...</div>;
-  }
+  // Toggle between user list and chat in mobile view
+  const toggleMobileView = () => {
+    setShowMobileChat(!showMobileChat);
+  };
 
-  if (!currentUser) {
+  // Handle selecting a user in mobile view
+  const handleUserSelect = (userId: string) => {
+    setCurrentChat(userId);
+    // In mobile view, show chat area when a user is selected
+    setShowMobileChat(true);
+  };
+
+  if (isLoading) {
     return (
       <div className="flex h-screen items-center justify-center bg-gray-100">
-        <div className="bg-white p-8 rounded-lg shadow-md w-96">
-          <h1 className="text-2xl font-bold mb-6 text-center">Chat App {authMode === 'login' ? 'Login' : 'Register'}</h1>
-          
-          {authError && (
-            <div className="mb-4 p-2 bg-red-100 text-red-700 rounded text-sm">
-              {authError}
-            </div>
-          )}
-          
-          <form onSubmit={handleAuthSubmit}>
-            <div className="mb-4">
-              <label className="block text-gray-700 mb-2">Username</label>
-              <input
-                type="text"
-                name="username"
-                value={authForm.username}
-                onChange={handleAuthInputChange}
-                className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter your username"
-                required
-              />
-            </div>
-            
-            <div className="mb-6">
-              <label className="block text-gray-700 mb-2">Password</label>
-              <input
-                type="password"
-                name="password"
-                value={authForm.password}
-                onChange={handleAuthInputChange}
-                className="w-full p-2 border border-gray-300 rounded focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="Enter your password"
-                required
-              />
-            </div>
-            
-            <button
-              type="submit"
-              className="w-full bg-blue-500 text-white p-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-            >
-              {authMode === 'login' ? 'Login' : 'Register'}
-            </button>
-          </form>
-          
-          <div className="mt-4 text-center text-sm">
-            {authMode === 'login' ? (
-              <p>
-                Don't have an account?{' '}
-                <button
-                  onClick={() => {
-                    setAuthMode('register');
-                    setAuthError('');
-                  }}
-                  className="text-blue-500 hover:underline"
-                >
-                  Register
-                </button>
-              </p>
-            ) : (
-              <p>
-                Already have an account?{' '}
-                <button
-                  onClick={() => {
-                    setAuthMode('login');
-                    setAuthError('');
-                  }}
-                  className="text-blue-500 hover:underline"
-                >
-                  Login
-                </button>
-              </p>
-            )}
-          </div>
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500 mx-auto"></div>
+          <p className="mt-4 text-gray-600">Loading...</p>
         </div>
       </div>
     );
   }
 
+  if (!currentUser) {
+    return (
+      <AuthFormComponent
+        authMode={authMode}
+        authError={authError}
+        authForm={authForm}
+        onAuthSubmit={handleAuthSubmit}
+        onAuthInputChange={handleAuthInputChange}
+        onAuthModeChange={(mode) => {
+          setAuthMode(mode);
+          setAuthError('');
+        }}
+      />
+    );
+  }
+
   return (
-    <div className="flex h-screen bg-gray-100">
+    <div className="flex h-screen overflow-hidden">
       {/* Sidebar */}
-      <div className="w-1/4 bg-white border-r border-gray-200">
-        <div className="p-4 border-b border-gray-200 flex justify-between items-center">
-          <h1 className="text-xl font-semibold text-gray-800">Chats</h1>
-          <div className="flex items-center">
-            <span className="text-sm text-gray-600 mr-2">
-              {currentUser.username}
-            </span>
-            <button
-              onClick={handleLogout}
-              className="text-sm bg-red-500 text-white px-2 py-1 rounded hover:bg-red-600 focus:outline-none"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-        <div className="overflow-y-auto h-[calc(100%-4rem)]">
-          {users.length === 0 ? (
-            <div className="p-4 text-center text-gray-500">No users available</div>
-          ) : (
-            users.map((user) => (
-              <div
-                key={user._id}
-                className={`flex items-center p-3 cursor-pointer hover:bg-gray-50 ${currentChat === user._id ? 'bg-blue-50' : ''}`}
-                onClick={() => setCurrentChat(user._id)}
-              >
-                <div className="relative">
-                  <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-600">
-                    {user.username.charAt(0).toUpperCase()}
-                  </div>
-                  <span className={`absolute bottom-0 right-0 w-3 h-3 rounded-full ${user.status === 'online' ? 'bg-green-500' : 'bg-gray-300'}`}></span>
-                </div>
-                <div className="ml-3 flex-1">
-                  <div className="flex justify-between">
-                    <h2 className="font-medium text-gray-900">{user.username}</h2>
-                  </div>
-                  <p className="text-sm text-gray-500">
-                    {typingStatus[user._id] ? (
-                      <span className="text-green-600 font-medium flex items-center">
-                        <span className="inline-block w-1.5 h-1.5 bg-green-600 rounded-full mr-1 animate-pulse"></span>
-                        Typing...
-                      </span>
-                    ) : (
-                      user.status === 'online' ? 'Online' : 'Offline'
-                    )}
-                  </p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+      <div 
+        className={`
+          md:relative
+          w-full md:w-1/3 lg:w-1/4
+          max-w-full md:max-w-[350px]
+          h-full
+          bg-white
+          ${showMobileChat ? 'hidden md:block' : 'block'}
+        `}
+      >
+        <UserList
+          users={users}
+          currentUser={currentUser}
+          currentChat={currentChat}
+          typingStatus={typingStatus}
+          onUserSelect={handleUserSelect}
+          onLogout={handleLogout}
+        />
       </div>
 
       {/* Chat Area */}
-      <div className="flex-1 flex flex-col">
-        {currentChat ? (
-          <>
-            {/* Chat Header */}
-            <div className="p-3 border-b border-gray-200 bg-white flex items-center">
-              <div className="relative">
-                <div className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-600">
-                  {users.find(u => u._id === currentChat)?.username.charAt(0).toUpperCase()}
-                </div>
-                <span
-                  className={`absolute bottom-0 right-0 w-3 h-3 rounded-full ${
-                    users.find(u => u._id === currentChat)?.status === 'online' ? 'bg-green-500' : 'bg-gray-300'
-                  }`}
-                ></span>
-              </div>
-              <div className="ml-3">
-                <h2 className="font-medium text-gray-900">
-                  {users.find(u => u._id === currentChat)?.username}
-                </h2>
-                <p className={`text-xs ${
-                  users.find(u => u._id === currentChat)?.status === 'online' 
-                    ? typingStatus[currentChat] 
-                      ? 'text-green-600 font-medium' 
-                      : 'text-green-500'
-                    : 'text-gray-500'
-                }`}>
-                  {users.find(u => u._id === currentChat)?.status === 'online' 
-                    ? typingStatus[currentChat] 
-                      ? 'Typing...' 
-                      : 'Online'
-                    : 'Offline'}
-                </p>
-              </div>
-            </div>
-
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-              {messages.length === 0 ? (
-                <div className="text-center text-gray-500 mt-4">No messages yet. Start a conversation!</div>
-              ) : (
-                messages.map((msg) => (
-                  msg.type === 'system' ? (
-                    <div key={msg._id} className="flex justify-center my-2">
-                      <div className="bg-gray-200 text-gray-600 px-3 py-1 rounded-full text-xs">
-                        {msg.content}
-                      </div>
-                    </div>
-                  ) : (
-                    <div 
-                      key={msg._id} 
-                      className={`mb-4 flex ${msg.sender === currentUser._id ? 'justify-end' : 'justify-start'}`}
-                    >
-                      <div 
-                        className={`max-w-xs p-3 rounded-lg ${
-                          msg.sender === currentUser._id 
-                            ? 'bg-blue-500 text-white' 
-                            : 'bg-white border border-gray-200'
-                        }`}
-                      >
-                        <p>{msg.content}</p>
-                        <p 
-                          className={`text-xs mt-1 text-right ${
-                            msg.sender === currentUser._id ? 'text-blue-100' : 'text-gray-500'
-                          }`}
-                        >
-                          {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                      </div>
-                    </div>
-                  )
-                ))
-              )}
-              
-              {/* Typing indicator */}
-              {typingStatus[currentChat] && (
-                <div className="flex items-center text-gray-500 text-sm mb-2">
-                  <div className="flex space-x-1 bg-gray-100 px-4 py-2 rounded-full">
-                    <div className="w-2 h-2 rounded-full bg-gray-500 animate-bounce"></div>
-                    <div className="w-2 h-2 rounded-full bg-gray-500 animate-bounce delay-75"></div>
-                    <div className="w-2 h-2 rounded-full bg-gray-500 animate-bounce delay-150"></div>
-                    <span className="ml-2 text-gray-600 font-medium">Typing...</span>
-                  </div>
-                </div>
-              )}
-              
-              {/* Invisible element to scroll to */}
-              <div ref={messagesEndRef} />
-            </div>
-
-            {/* Message Input */}
-            <div className="p-3 bg-white border-t border-gray-200">
-              <div className="flex items-center">
-                <input
-                  type="text"
-                  value={messageInput}
-                  onChange={handleInputChange}
-                  onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder="Type a message..."
-                  className="flex-1 p-2 border border-gray-300 rounded-l-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                />
-                <button
-                  onClick={handleSendMessage}
-                  disabled={!messageInput.trim()}
-                  className="bg-blue-500 text-white p-2 rounded-r-lg hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50"
-                >
-                  Send
-                </button>
-              </div>
-            </div>
-          </>
-        ) : (
-          <div className="flex-1 flex items-center justify-center bg-gray-50 text-gray-500">
-            Select a contact to start chatting
-          </div>
-        )}
+      <div 
+        className={`
+          flex-1 flex flex-col h-full
+          ${showMobileChat ? 'block' : 'hidden md:flex'}
+        `}
+      >
+        <ChatArea
+          currentUser={currentUser}
+          currentChat={currentChat}
+          messages={messages}
+          messageInput={messageInput}
+          typingStatus={typingStatus}
+          users={users}
+          onSendMessage={handleSendMessage}
+          onInputChange={handleInputChange}
+          messagesEndRef={messagesEndRef as React.RefObject<HTMLDivElement>}
+          onToggleMobileView={toggleMobileView}
+        />
       </div>
     </div>
   );
