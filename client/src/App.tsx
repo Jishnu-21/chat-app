@@ -267,13 +267,16 @@ const App = () => {
   const handleLogout = async () => {
     try {
       setIsLoading(true);
-      await authApi.logout();
-      disconnectSocket();
+      // First clear the user state to immediately show login screen
       setCurrentUser(null);
+      // Then clean up other state and resources
+      disconnectSocket();
       setUsers([]);
       setMessages([]);
       setCurrentChat(null);
       socketInitializedRef.current = false;
+      // Finally call the API to logout on the server
+      await authApi.logout();
     } catch (error) {
       console.error('Error during logout:', error);
     } finally {

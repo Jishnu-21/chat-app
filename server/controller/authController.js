@@ -28,18 +28,31 @@ exports.register = async (req, res) => {
   try {
     const { username, password } = req.body;
     
-    if (!username || !password) {
-      return res.status(400).json({ message: 'Username and password are required' });
+    // Enhanced validation
+    if (!username) {
+      return res.status(400).json({ message: 'Username is required' });
+    }
+    
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required' });
+    }
+    
+    if (username.trim().length < 3) {
+      return res.status(400).json({ message: 'Username must be at least 3 characters long' });
+    }
+    
+    if (password.trim().length < 6) {
+      return res.status(400).json({ message: 'Password must be at least 6 characters long' });
     }
     
     // Check if user already exists
-    const existingUser = await User.findOne({ username });
+    const existingUser = await User.findOne({ username: username.trim() });
     if (existingUser) {
       return res.status(400).json({ message: 'Username already exists' });
     }
     
     // Create new user
-    const newUser = new User({ username, password });
+    const newUser = new User({ username: username.trim(), password: password.trim() });
     const savedUser = await newUser.save();
     
     // Generate token
@@ -60,7 +73,11 @@ exports.register = async (req, res) => {
     
     res.status(201).json(userResponse);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Registration error:', error);
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Validation error: ' + error.message });
+    }
+    res.status(500).json({ message: 'Server error during registration. Please try again.' });
   }
 };
 
@@ -69,20 +86,25 @@ exports.login = async (req, res) => {
   try {
     const { username, password } = req.body;
     
-    if (!username || !password) {
-      return res.status(400).json({ message: 'Username and password are required' });
+    // Enhanced validation
+    if (!username) {
+      return res.status(400).json({ message: 'Username is required' });
+    }
+    
+    if (!password) {
+      return res.status(400).json({ message: 'Password is required' });
     }
     
     // Find user
-    const user = await User.findOne({ username });
+    const user = await User.findOne({ username: username.trim() });
     if (!user) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'Invalid username or password' });
     }
     
     // Check password
-    const isMatch = await user.comparePassword(password);
+    const isMatch = await user.comparePassword(password.trim());
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid credentials' });
+      return res.status(401).json({ message: 'Invalid username or password' });
     }
     
     // Generate token
@@ -103,7 +125,11 @@ exports.login = async (req, res) => {
     
     res.status(200).json(userResponse);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Login error:', error);
+    if (error.name === 'ValidationError') {
+      return res.status(400).json({ message: 'Validation error: ' + error.message });
+    }
+    res.status(500).json({ message: 'Server error during login. Please try again.' });
   }
 };
 

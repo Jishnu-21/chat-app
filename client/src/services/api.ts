@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // With the proxy configuration in vite.config.ts, we can use a relative URL
 // This will be proxied to the server URL defined in the vite config
-const API_URL = 'https://chat-app-stit.onrender.com/api';
+const API_URL = 'https://chat-app-stit.onrender.com/';
 
 // Create axios instance
 const api = axios.create({
